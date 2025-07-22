@@ -1,14 +1,13 @@
 
-# global settings
+# global settings -->
 library(shiny)
 
-# Define UI for application that draws a histogram
+# end of global settings
+
 fluidPage(
 
-    # Application title
     titlePanel(" "),
 
-    # Sidebar with a slider input for number of bins
     sidebarLayout(
         sidebarPanel(
             shiny::textInput("url",
@@ -20,7 +19,6 @@ fluidPage(
         ),
         
 
-        # Show a plot of the generated distribution
         mainPanel(
             textOutput("url")
         )

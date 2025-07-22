@@ -1,9 +1,8 @@
 
 
-# Define server logic required to draw a histogram
 function(input, output, session) {
-
   
+  # when push process button -->
   observeEvent(input$go_button, {
     
     output$url <- renderText({
@@ -23,7 +22,7 @@ function(input, output, session) {
         message <- paste0("nothing after 'https://www.'")
       }
       
-      # if still good - update output, else add message ->
+      # if still good - update output, else add message -=>
       if (go == 1 && nchar(url_input) > 12) {
         url_check <- url_input
       } else {
@@ -31,9 +30,8 @@ function(input, output, session) {
       }
       
       url_check
-    })
+    }) # end of url text output
     
-  })
+  }) # end of action button processing
     
-
-}
+} # end of server logic
