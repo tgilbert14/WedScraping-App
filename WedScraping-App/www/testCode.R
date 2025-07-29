@@ -2,6 +2,7 @@
 library(httr)
 library(rvest)
 library(stringr)
+library(dplyr)
 
 # https://snre.arizona.edu/research
 # https://envs.arizona.edu/research
@@ -27,27 +28,6 @@ card <- page %>%
   html_nodes(".card-body") %>% 
   html_text(trim = TRUE)
 
-card[1]
-
-
-
-
-# subject <- page %>% 
-#   html_nodes("#views-bootstrap-az-person-grid-block-3cols .field--label-hidden") %>% 
-#   html_text(trim = TRUE)
-# subject
-
-card %>% 
-  str_replace_all("\n\n", "\n") %>%    # Normalize line breaks
-  str_squish() %>%                   # Remove excessive whitespace
-  str_split_fixed(" ", n = 200)
-
-# Clean text and split into components
-cleaned <- card %>% 
-  str_replace_all("\n", "\n") %>%    # Normalize line breaks
-  str_squish() %>%                   # Remove excessive whitespace
-  str_split_fixed(" ", n = 200)      # Break into chunks
-
 # Extract meaningful parts
 extract_profile <- function(text) {
   lines <- str_split(text, "\n")[[1]] %>% str_squish()
@@ -57,8 +37,8 @@ extract_profile <- function(text) {
   name <- lines[1]
   email <- tail(lines[str_detect(lines, "@")], 1)
   title <- lines[2]
-  interests <- lines[str_detect(lines, "Learning|intelligence|Cybersecurity")]
-  
+  interests <- lines[str_detect(lines, "Learning|climate|data|Evolutionary|biology|Bioinformatics|natural|resources|managment|fauna|flora|analytics|statistics|visualization|web|scraping|mining")]
+
   list(
     name = name,
     title = title,
@@ -67,6 +47,12 @@ extract_profile <- function(text) {
   )
 }
 
-profiles <- lapply(raw, extract_profile)
-profiles_df <- bind_rows(lapply(profiles, as.data.frame))
+profiles <- lapply(card, extract_profile)
 
+profiles_df <- bind_rows(profiles)
+View(profiles_df)
+
+
+
+## would you be open to chatting about programming and/or data visualizations you are doing in your lab?
+## make interactive shiny apps for your work.. allow me to use some of the code on my portfolio...
