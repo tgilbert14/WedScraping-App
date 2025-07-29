@@ -1,0 +1,95 @@
+/* UI ----> */
+.sidebar-panel {
+  background-color: rgb(235, 246, 246);
+  padding: 10px;
+  border-radius: 5px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  display: block;
+}
+
+.new-ui {
+  background-color: black;
+  padding: 10px;
+  border-radius: 5px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  color: white;
+  display: block;
+  width: 100%;
+  height: 100%;
+  position: inherit;
+}
+
+/* Server ----> */
+.flex-box {
+  gap: 20px;
+  margin-top: 0px;
+  display: flex;
+  flex-direction: row;
+  align-items: left;
+  justify-content: left;
+  padding: 20px;
+  border-radius: 5px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  background-color: rgb(235, 246, 246);
+  width: 100%;
+}
+
+.output-box-1 {
+  border: 1px solid #ccc;
+  padding: 10px;
+  margin-bottom: 20px;
+  border-radius: 5px;
+  background-color: white;
+  max-height: 100px;
+}
+
+.output-box-2 {
+  border: 1px solid #ccc;
+  padding: 10px;
+  border-radius: 5px;
+  background-color: white;
+  overflow-y: scroll;
+  max-height: 400px;
+}
+
+.output-box-1-goButtonPush-TRUE {
+  border: 1px solid #ccc;
+  padding: 10px;
+  margin-bottom: 20px;
+  border-radius: 5px;
+  color: black;
+  font-weight: bold;
+  background-color: rgba(0, 255, 51, 0.45);
+  max-height: 100px;
+}
+
+.output-box-2-goButtonPush-TRUE {
+  border: 1px solid #ccc;
+  padding: 10px;
+  border-radius: 5px;
+  color: black;
+  font-weight: bold;
+  background-color: rgba(0, 255, 51, 0.45);
+  overflow-y: scroll;
+  max-height: 400px;
+}
+
+.output-box-1-goButtonPush-FALSE {
+  border: 1px solid #ccc;
+  padding: 10px;
+  margin-bottom: 20px;
+  border-radius: 5px;
+  color: whitesmoke;
+  background-color: rgb(120, 0, 0);
+  max-height: 100px;
+}
+
+.output-box-2-goButtonPush-FALSE {
+  border: 1px solid #ccc;
+  padding: 10px;
+  border-radius: 5px;
+  color: whitesmoke;
+  background-color: rgb(120, 0, 0);
+  overflow-y: scroll;
+  max-height: 400px;
+}
