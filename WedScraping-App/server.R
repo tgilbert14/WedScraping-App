@@ -799,7 +799,7 @@ function(input, output, session) {
     req(rv$disc); df <- rv$disc$images
     if (nrow(df) == 0) { notify("No images to add.", "warning"); return() }
     open_add_modal(paste0("images_", slugify(rv$analysis$domain)), df,
-                   gen_custom_code(cur_url(), "img[src]", "src", render_js = used_js()),
+                   gen_images_code(cur_url(), used_js()),
                    paste0("Images on ", cur_url()))
   })
 
@@ -813,8 +813,7 @@ function(input, output, session) {
     req(rv$disc); df <- rv$disc$headings
     if (nrow(df) == 0) { notify("No headings to add.", "warning"); return() }
     open_add_modal(paste0("headings_", slugify(rv$analysis$domain)), df,
-                   gen_custom_code(cur_url(), "h1, h2, h3, h4, h5", "text",
-                                   render_js = used_js()),
+                   gen_headings_code(cur_url(), used_js()),
                    paste0("Headings on ", cur_url()))
   })
 

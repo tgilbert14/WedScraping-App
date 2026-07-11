@@ -38,8 +38,12 @@ sites).
 
 ## What it does
 
-1. **Point** — paste a URL (or pick a bundled example: 247Sports commits, On3
-   commits, Wikipedia tables, Books to Scrape, a faculty directory).
+1. **Point** — paste a URL (press <kbd>Enter</kbd> to analyze) or pick a
+   bundled example: 247Sports commits / team rankings / top recruits /
+   transfer portal, On3 commits, Wikipedia tables, Books/Quotes to Scrape, a
+   faculty directory. A **Recent URLs** dropdown remembers this session's
+   pages, and a **Pages to scrape** control follows "next page" links so a
+   multi-page list comes back whole (see below).
 2. **Analyze** — the app fetches the page with a real-browser User-Agent
    (httr `RETRY`, friendly error messages) and fingerprints the site: domain,
    detected type, tech stack (Next.js / WordPress / React / …), structured
@@ -67,11 +71,29 @@ sites).
      destinations). Also: On3 via `__NEXT_DATA__`, Rivals, Wikipedia, ESPN,
      and university directory cards. **Quick scrape** picks the best guess
      in one click.
-4. **Use** — datasets collect in **My Data**: clean (dedupe, drop empty
-   rows/columns), rename, download as CSV / TSV / Excel / JSON / RDS, or
-   export everything as one Excel workbook. Every dataset carries the
-   generated standalone R script that reproduces it outside the app.
-   A **History** tab logs the whole session.
+4. **Use** — datasets collect in **My Data**:
+   - **Clean** — dedupe, drop empty rows/columns, rename.
+   - **Auto-detect column types** — coerces text to integer / numeric /
+     logical cleanly (handles thousands separators, currency, `%`, yes/no;
+     leaves zero-padded codes and big IDs as text), so the export is
+     analysis-ready.
+   - **Columns** — untick to drop, drag to reorder.
+   - **Download** — CSV / TSV / Excel / JSON / RDS, or every dataset as one
+     Excel workbook; or **Copy data (TSV)** straight to the clipboard.
+   - Every dataset carries the **generated standalone R script** that
+     reproduces it outside the app (with a one-click **Copy** button on each
+     code panel). A **History** tab logs the whole session.
+
+### Multi-page scraping (pagination)
+
+Set **Pages to scrape** above 1 and the app follows the site's "next page"
+link — `rel="next"`, `.next` controls, next-glyph anchors, or numbered
+`?page=N` patterns — stacking every page into one data frame (with a `page`
+column marking provenance). It stays on the same site and the same listing
+path, so a stray link in a footer can't hijack it. Example: 247Sports
+rankings return all recruits across pages instead of one page of 50. The
+generated R script emits a matching page-follow loop. (Pagination needs a
+direct request; it's skipped under headless-Chrome rendering.)
 
 ## Project layout
 
@@ -81,16 +103,19 @@ WedScraping-App/          the Shiny app
 ├── ui.R                  bslib page + tabs
 ├── server.R              reactive flow
 ├── R/
-│   ├── scraper_engine.R  fetch / analyze / discover / extract / codegen
+│   ├── scraper_engine.R  fetch / paginate / analyze / discover / extract /
+│   │                     type-inference / codegen
 │   └── recipes.R         curated site recipes
-└── www/styles.css        styling
+└── www/
+    ├── styles.css        design system (tokens, dark sidebar, components)
+    └── app.js            enter-to-analyze + copy-to-clipboard
 dev-notes/                scratch scripts kept out of the served www/ folder
 ```
 
 ## Notes
 
 - Scrape responsibly: respect sites' terms of service and robots.txt, and
-  keep request volumes polite (the fetcher already retries with backoff and
-  sends a normal browser UA).
+  keep request volumes polite (the fetcher retries with backoff, sends a
+  normal browser UA, and pauses between paginated page fetches).
 - Recipes are best-effort sugar — site markup drifts; when a recipe returns
   zero rows the generic discovery tabs still work.

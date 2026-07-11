@@ -820,7 +820,9 @@ scrape_links <- function(page, base_url = NULL, max_links = 3000) {
     href = href,
     url  = url,
     internal = if (nzchar(dom)) {
-      !is.na(link_dom) & endsWith(link_dom, dom)
+      # exact host OR a real subdomain (dot boundary) - not a lookalike like
+      # "beon3.com" merely ending with "on3.com"
+      !is.na(link_dom) & (link_dom == dom | endsWith(link_dom, paste0(".", dom)))
     } else NA
   ) %>%
     dplyr::filter(!stringr::str_detect(href, "^(javascript:|#$)")) %>%
@@ -1060,7 +1062,10 @@ coerce_column <- function(x) {
     if (any(grepl("^0[0-9]+$", stripped))) return(x)
     num_all <- suppressWarnings(as.numeric(
       stringr::str_remove(stringr::str_remove_all(v, "[,$£€\\s]"), "%$")))
-    if (any(had_pct)) num_all <- num_all / 100
+    # divide ONLY the values that actually carried a % (a mixed column must
+    # not scale its plain numbers); pct_all is indexed over the full vector
+    pct_all <- grepl("%$", stringr::str_remove_all(v, "[,$£€\\s]"))
+    num_all[pct_all] <- num_all[pct_all] / 100
     # integer only when every value is whole AND within 32-bit int range
     # (as.integer() would silently turn a bigger whole number into NA)
     if (all(is.na(num_all) | num_all == round(num_all)) &&
@@ -1394,19 +1399,28 @@ gen_recipe_code <- function(recipe, url, render_js = FALSE, pages = 1) {
 first_url <- %s
 max_pages  <- %d
 
-frames <- list(); url <- first_url; visited <- character()
+frames <- list(); url <- first_url; visited <- character(); tag_col <- NULL
 for (i in seq_len(max_pages)) {
   resp <- RETRY("GET", url, user_agent(%s), timeout(20), times = 3, pause_base = 2)
   if (http_error(resp)) break
   page <- read_html(content(resp, as = "text", encoding = "UTF-8"))
   df_i <- recipe_scrape(page, url)
-  if (nrow(df_i) > 0) { df_i$page <- i; frames[[length(frames) + 1]] <- df_i }
+  if (nrow(df_i) > 0) {
+    if (is.null(tag_col))
+      tag_col <- if ("page" %%in%% names(df_i))
+        make.unique(c(names(df_i), "page"))[length(names(df_i)) + 1L] else "page"
+    df_i[[tag_col]] <- i
+    frames[[length(frames) + 1]] <- df_i
+  }
   visited <- c(visited, url)
   nx <- next_url(page, url)
   if (is.na(nx) || nx %%in%% visited) break
   url <- nx; Sys.sleep(0.6)
 }
 df <- bind_rows(frames)
+# a single scraped page shouldn\'t carry a constant page marker
+if (!is.null(tag_col) && tag_col %%in%% names(df) && length(unique(df[[tag_col]])) <= 1)
+  df[[tag_col]] <- NULL
 
 df', r_str(url), pages, r_str(BROWSER_UA))))
   }
@@ -1524,11 +1538,10 @@ gen_links_code <- function(url, render_js = FALSE, filter_text = "",
                            internal_only = FALSE) {
   filt <- ""
   if (isTRUE(internal_only)) {
-    filt <- paste0(filt, sprintf('
+    filt <- paste0(filt, '
 
 # keep only links on this site (the "Internal links only" toggle)
-link_dom <- stringr::str_match(df$url, "^https?://(?:www\\\\.)?([^/:]+)")[, 2]
-df <- df[!is.na(link_dom) & endsWith(link_dom, %s), ]', r_str(url_domain(url))))
+df <- df[df$internal %in% TRUE, ]')
   }
   if (nzchar(filter_text %||% "")) {
     filt <- paste0(filt, sprintf('
@@ -1539,18 +1552,53 @@ df <- dplyr::filter(df, stringr::str_detect(
       r_str(filter_text)))
   }
   paste0(
-    gen_fetch_code(url, render_js), '
+    gen_fetch_code(url, render_js), sprintf('
 
+site_dom <- %s
 a <- html_elements(page, "a[href]")
+link_dom <- stringr::str_match(xml2::url_absolute(html_attr(a, "href"), url),
+                               "^https?://(?:www\\\\.)?([^/:]+)")[, 2]
 df <- tibble::tibble(
   text = stringr::str_squish(html_text(a)),
   href = html_attr(a, "href"),
-  url  = xml2::url_absolute(html_attr(a, "href"), url)
+  url  = xml2::url_absolute(html_attr(a, "href"), url),
+  # same-site flag: exact host or a real subdomain (dot boundary)
+  internal = !is.na(link_dom) & (link_dom == site_dom | endsWith(link_dom, paste0(".", site_dom)))
 )
 
 # drop javascript:/bare-# links and duplicates (same as the app)
 df <- dplyr::filter(df, !stringr::str_detect(href, "^(javascript:|#$)"))
-df <- dplyr::distinct(df, url, text, .keep_all = TRUE)', filt, '
+df <- dplyr::distinct(df, url, text, .keep_all = TRUE)', r_str(url_domain(url))), filt, '
+
+df')
+}
+
+gen_images_code <- function(url, render_js = FALSE) {
+  paste0(
+    gen_fetch_code(url, render_js), '
+
+imgs <- html_elements(page, "img[src]")
+src <- html_attr(imgs, "src")
+df <- tibble::tibble(
+  alt = stringr::str_squish(html_attr(imgs, "alt")),
+  src = src,
+  url = xml2::url_absolute(src, url)
+)
+df <- dplyr::distinct(df, url, .keep_all = TRUE)  # same as the app
+
+df')
+}
+
+gen_headings_code <- function(url, render_js = FALSE) {
+  paste0(
+    gen_fetch_code(url, render_js), '
+
+hs <- html_elements(page, "h1, h2, h3, h4, h5")
+df <- tibble::tibble(
+  level = html_name(hs),
+  text  = stringr::str_squish(html_text(hs))
+)
+df <- dplyr::filter(df, nzchar(text))  # same as the app
 
 df')
 }
