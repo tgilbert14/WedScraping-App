@@ -787,3 +787,79 @@ div.dt-container .dt-search input.dt-input:focus {
 
 /* keep long selects readable */
 .form-select { font-size: 0.88rem; }
+
+/* ---- pages-to-scrape control (sidebar) ------------------------------------- */
+.pages-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 10px;
+}
+.pages-row .form-group,
+.pages-row .shiny-input-container { margin-bottom: 0; flex: 0 0 auto; }
+.pages-label { display: flex; flex-direction: column; line-height: 1.2; }
+.pages-label b { color: #eafffb; font-size: 0.9rem; }
+.pages-label small { color: #8cccc4 !important; font-size: 0.72rem; }
+
+/* pagination hint on the Cards tab */
+.pages-hint {
+  margin: 6px 0 2px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  background: var(--brand-050);
+  border: 1px solid var(--brand-100);
+  color: var(--brand-800);
+}
+.pages-hint.warn {
+  background: var(--warn-bg);
+  border-color: var(--warn-border);
+  color: var(--warn-ink);
+}
+
+/* column picker row (My Data) */
+.cols-row { display: flex; gap: 7px; align-items: flex-start; }
+.cols-row .shiny-input-container { flex: 1; margin-bottom: 0; }
+.cols-row .selectize-control { margin-bottom: 0; }
+.cols-row .item { background: var(--brand-100) !important; color: var(--brand-900) !important;
+  border-radius: 6px !important; }
+
+/* ---- copy-to-clipboard on code panels -------------------------------------- */
+.code-wrap { position: relative; }
+.copy-code-btn {
+  position: absolute;
+  top: 5px;
+  right: 8px;
+  z-index: 2;
+  padding: 3px 11px;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #7dd3c8;
+  background: rgba(255, 255, 255, .08);
+  border: 1px solid rgba(255, 255, 255, .18);
+  border-radius: 7px;
+  cursor: pointer;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.copy-code-btn:hover { background: var(--brand-600); color: #fff; border-color: var(--brand-600); }
+
+/* copy confirmation toast (client-side, from app.js) */
+.copy-toast {
+  position: fixed;
+  bottom: 22px;
+  left: 50%;
+  transform: translate(-50%, 12px);
+  z-index: 3000;
+  padding: 9px 18px;
+  border-radius: 999px;
+  background: var(--brand-900);
+  color: #eafffb;
+  font-size: 0.85rem;
+  font-weight: 500;
+  box-shadow: var(--shadow-2);
+  opacity: 0;
+  transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
+  pointer-events: none;
+}
+.copy-toast.show { opacity: 1; transform: translate(-50%, 0); }

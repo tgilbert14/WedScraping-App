@@ -53,6 +53,7 @@ cards_tab <- tagList(
             checkboxInput("card_image",    "Include first image in each item", FALSE),
             checkboxInput("card_fulltext", "Include full item text", FALSE)
         ),
+        uiOutput("card_pages_hint"),
         actionButton("card_add", tagList(icon("plus"), " Add to My Data"),
                      class = "btn-success w-100 mt-2")
       )
@@ -222,11 +223,21 @@ data_tab <- tagList(
         uiOutput("data_meta"),
         tags$label(class = "form-label fw-semibold mt-2", "Clean"),
         div(class = "btn-stack",
+            actionButton("data_types", tagList(icon("wand-magic-sparkles"), " Auto-detect column types"),
+                         class = "btn-outline-primary btn-sm w-100"),
             actionButton("data_dedupe",   "Remove duplicate rows", class = "btn-outline-secondary btn-sm w-100"),
             actionButton("data_dropcols", "Drop empty columns",    class = "btn-outline-secondary btn-sm w-100"),
             actionButton("data_droprows", "Drop empty rows",       class = "btn-outline-secondary btn-sm w-100")
         ),
-        tags$label(class = "form-label fw-semibold mt-3", "Rename"),
+        tags$label(class = "form-label fw-semibold mt-3", "Columns (untick to drop, drag to reorder)"),
+        div(class = "cols-row",
+            selectizeInput("data_cols", NULL, choices = NULL, multiple = TRUE,
+                           width = "100%",
+                           options = list(plugins = list("remove_button"),
+                                          placeholder = "all columns")),
+            actionButton("data_cols_apply", "Apply", class = "btn-outline-secondary btn-sm")
+        ),
+        tags$label(class = "form-label fw-semibold mt-2", "Rename"),
         div(class = "rename-row",
             textInput("data_rename", NULL, "", placeholder = "new_name", width = "100%"),
             actionButton("data_rename_btn", "Rename", class = "btn-outline-secondary btn-sm")
@@ -241,6 +252,8 @@ data_tab <- tagList(
                      },
                      inline = TRUE),
         downloadButton("dl_dataset", "Download dataset", class = "btn-primary w-100"),
+        actionButton("data_copy", tagList(icon("clipboard"), " Copy data (TSV)"),
+                     class = "btn-outline-primary btn-sm w-100 mt-2"),
         if (HAS_WRITEXL)
           downloadButton("dl_all", "All datasets (Excel workbook)",
                          class = "btn-outline-primary w-100 mt-2"),
@@ -294,11 +307,20 @@ page_sidebar(
     selectInput("preset", NULL, choices = PRESETS, selectize = FALSE, width = "100%"),
     textInput("url", NULL,
               value = "https://247sports.com/college/arizona/Season/2026-Football/Commits/",
-              placeholder = "https://example.com/page", width = "100%"),
+              placeholder = "https://example.com/page  (press Enter to analyze)",
+              width = "100%"),
+    uiOutput("recent_ui"),
     checkboxInput("render_js",
                   tags$span("Render with headless Chrome",
                             tags$small(class = "text-muted", "for JS-heavy sites")),
                   value = FALSE),
+    div(class = "pages-row",
+        numericInput("pages", NULL, value = 1, min = 1, max = 25, step = 1,
+                     width = "72px"),
+        tags$span(class = "pages-label",
+                  tags$b("Pages to scrape"),
+                  tags$small(class = "text-muted",
+                             "follows “next page” links for lists & cards"))),
     actionButton("analyze", tagList(icon("wand-magic-sparkles"), " Analyze site"),
                  class = "btn-primary w-100 analyze-btn"),
     uiOutput("status_ui"),
@@ -306,9 +328,10 @@ page_sidebar(
   ),
 
   tags$head(
-    # bump ?v= whenever styles.css changes so returning browsers don't serve
-    # a stale cached copy
-    tags$link(rel = "stylesheet", href = "styles.css?v=5")
+    # bump ?v= whenever styles.css / app.js changes so returning browsers
+    # don't serve a stale cached copy
+    tags$link(rel = "stylesheet", href = "styles.css?v=7"),
+    tags$script(src = "app.js?v=3")
   ),
   useShinyjs(),
 

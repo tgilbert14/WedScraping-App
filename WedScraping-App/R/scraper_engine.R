@@ -60,6 +60,120 @@ url_domain <- function(url) {
 }
 
 # ---------------------------------------------------------------------------
+# PAGINATION - find the "next page" link so a list can be scraped in full
+# ---------------------------------------------------------------------------
+
+# Extract the page number encoded in a URL (?page=N / ?Page=N / /page/N /
+# /page-N), or NA if none. Case-insensitive.
+url_page_num <- function(u) {
+  u <- u %||% ""
+  m <- stringr::str_match(u, "(?i)[?&]page=(\\d+)")[, 2]
+  if (is.na(m)) m <- stringr::str_match(u, "(?i)/page[-/](\\d+)")[, 2]
+  if (is.na(m)) NA_integer_ else as.integer(m)
+}
+
+# Return the absolute URL of the next page, or NA if there isn't one.
+# Tries, in order: <link rel=next>, <a rel=next>, common "next" controls, a
+# next-glyph anchor, and finally a numbered-pagination link to page (current+1).
+next_page_url <- function(page, current_url) {
+  pick <- function(node) {
+    if (inherits(node, "xml_missing") || length(node) == 0) return(NA_character_)
+    href <- rvest::html_attr(node[[1]], "href")
+    if (is.na(href) || !nzchar(href) || stringr::str_detect(href, "^(#|javascript:)")) {
+      return(NA_character_)
+    }
+    abs <- xml2::url_absolute(href, current_url)
+    if (identical(abs, current_url)) NA_character_ else abs
+  }
+
+  # 1. semantic rel=next
+  for (sel in c("link[rel='next']", "a[rel='next']")) {
+    u <- pick(rvest::html_elements(page, sel))
+    if (!is.na(u)) return(u)
+  }
+  # 2. common "next" controls (class / aria). NB: rvest's selectr CSS parser
+  # rejects the case-insensitive `i` attribute flag, so match both casings.
+  for (sel in c("a.next[href]", "li.next a[href]", ".next > a[href]",
+                ".pagination-next a[href]", "a.pagination__next[href]",
+                "a[aria-label*='Next'][href]", "a[aria-label*='next'][href]",
+                "a[title*='Next'][href]", "a[rel~='next'][href]")) {
+    u <- pick(rvest::html_elements(page, sel))
+    if (!is.na(u)) return(u)
+  }
+  # 3. an anchor whose visible text is a next-glyph / "next"
+  anchors <- rvest::html_elements(page, "a[href]")
+  if (length(anchors)) {
+    txt <- stringr::str_squish(tolower(rvest::html_text(anchors)))
+    is_next <- txt %in% c("next", "next page", "next »", "next ›", "»", "›", ">",
+                          "older", "older posts", "next ›", "next »")
+    if (any(is_next)) {
+      u <- pick(anchors[which(is_next)[1]])
+      if (!is.na(u)) return(u)
+    }
+  }
+  # 4. numbered pagination: a link to page (current + 1). Catches ?Page=N
+  # sites (e.g. 247Sports) that have no rel=next / .next control.
+  if (length(anchors)) {
+    hrefs <- rvest::html_attr(anchors, "href")
+    want  <- (url_page_num(current_url) %||% 1L)
+    want  <- (if (is.na(want)) 1L else want) + 1L
+    nums  <- vapply(hrefs, function(h) {
+      abs <- if (is.na(h)) NA_character_ else xml2::url_absolute(h, current_url)
+      url_page_num(abs)
+    }, integer(1))
+    hit <- which(!is.na(nums) & nums == want)
+    if (length(hit)) {
+      u <- pick(anchors[hit[1]])
+      if (!is.na(u)) return(u)
+    }
+  }
+  NA_character_
+}
+
+# Run `extract_fn(page, url)` across up to `max_pages` pages, following the
+# next-page link each time, and stack the rows. `extract_fn` returns a tibble.
+# `on_progress(i, n_rows)` is an optional callback for UI feedback.
+scrape_paginated <- function(first_page, first_url, extract_fn,
+                             max_pages = 5, render_js = FALSE, delay_s = 0.6,
+                             on_progress = NULL, tag_page = TRUE) {
+  max_pages <- max(1, min(as.integer(max_pages %||% 1), 50))
+  visited <- character()
+  frames <- list()
+  page <- first_page
+  url  <- first_url
+  i <- 0L
+  repeat {
+    i <- i + 1L
+    df <- tryCatch(extract_fn(page, url), error = function(e) tibble::tibble())
+    if (is.data.frame(df) && nrow(df) > 0) {
+      if (isTRUE(tag_page)) df$page <- i
+      frames[[length(frames) + 1]] <- df
+    }
+    if (is.function(on_progress)) on_progress(i, sum(vapply(frames, nrow, integer(1))))
+    visited <- c(visited, url)
+    if (i >= max_pages) break
+
+    nxt <- tryCatch(next_page_url(page, url), error = function(e) NA_character_)
+    if (is.na(nxt) || nxt %in% visited) break
+
+    Sys.sleep(delay_s)  # be polite between page fetches
+    f <- fetch_page(nxt, render_js = render_js)
+    if (!isTRUE(f$ok) || is.null(f$page)) break
+    page <- f$page
+    url  <- f$final_url %||% nxt
+  }
+
+  out <- dplyr::bind_rows(frames)
+  # a single scraped page shouldn't carry a constant page=1 column
+  if (isTRUE(tag_page) && "page" %in% names(out) &&
+      length(unique(out$page)) <= 1) {
+    out$page <- NULL
+  }
+  attr(out, "pages_scraped") <- i
+  out
+}
+
+# ---------------------------------------------------------------------------
 # FETCH
 # ---------------------------------------------------------------------------
 
@@ -887,6 +1001,61 @@ sanitize_df <- function(df) {
   tibble::as_tibble(df, .name_repair = "minimal")
 }
 
+# Guess a better type for a character column and coerce it. Only commits when
+# the whole non-empty column parses cleanly (no silent NA-coercion). Handles
+# numbers with thousands separators / %, integers, and logicals. Returns the
+# (possibly unchanged) column.
+coerce_column <- function(x) {
+  if (!is.character(x)) return(x)
+  v <- stringr::str_squish(x)
+  v[v %in% c("", "NA", "N/A", "na", "n/a", "-", "--", "null", "NULL")] <- NA
+  nonempty <- v[!is.na(v)]
+  if (!length(nonempty)) return(x)
+
+  # logical
+  low <- tolower(nonempty)
+  if (all(low %in% c("true", "false", "yes", "no", "t", "f", "y", "n"))) {
+    out <- rep(NA, length(v))
+    out[!is.na(v)] <- tolower(stringr::str_squish(v[!is.na(v)])) %in%
+      c("true", "yes", "t", "y")
+    return(out)
+  }
+
+  # numeric: strip thousands separators, currency, trailing %
+  stripped <- stringr::str_remove_all(nonempty, "[,$£€\\s]")
+  had_pct <- grepl("%$", stripped)
+  stripped <- stringr::str_remove(stripped, "%$")
+  if (all(grepl("^[+-]?(\\d+\\.?\\d*|\\.\\d+)([eE][+-]?\\d+)?$", stripped))) {
+    num_all <- suppressWarnings(as.numeric(
+      stringr::str_remove(stringr::str_remove_all(v, "[,$£€\\s]"), "%$")))
+    if (any(had_pct)) num_all <- num_all / 100
+    # integer if every value is whole
+    if (all(is.na(num_all) | num_all == round(num_all))) {
+      return(as.integer(round(num_all)))
+    }
+    return(num_all)
+  }
+  x
+}
+
+# Auto-detect + coerce every column; report which changed type.
+infer_types <- function(df) {
+  if (!is.data.frame(df) || ncol(df) == 0) {
+    return(list(df = df, changed = character()))
+  }
+  changed <- character()
+  for (nm in names(df)) {
+    before <- class(df[[nm]])[1]
+    new <- coerce_column(df[[nm]])
+    after <- class(new)[1]
+    if (!identical(before, after)) {
+      df[[nm]] <- new
+      changed <- c(changed, sprintf("%s (%s->%s)", nm, before, after))
+    }
+  }
+  list(df = tibble::as_tibble(df), changed = changed)
+}
+
 clean_dataset <- function(df, dedupe = FALSE, drop_empty_cols = FALSE,
                           drop_empty_rows = FALSE) {
   if (isTRUE(drop_empty_cols) && ncol(df) > 0) {
@@ -974,9 +1143,39 @@ names(df) <- make.unique(ifelse(nzchar(names(df)), names(df),
 df', index, index, promote))
 }
 
+# the next-page follow helper, emitted into paginated scripts
+NEXT_URL_FN <- 'url_page_num <- function(u) {
+  u <- if (is.null(u) || is.na(u)) "" else u
+  m <- stringr::str_match(u, "(?i)[?&]page=(\\\\d+)")[, 2]
+  if (is.na(m)) m <- stringr::str_match(u, "(?i)/page[-/](\\\\d+)")[, 2]
+  if (is.na(m)) NA_integer_ else as.integer(m)
+}
+next_url <- function(page, url) {
+  for (sel in c("link[rel=\'next\']", "a[rel=\'next\']", "a.next[href]",
+                "li.next a[href]", "a[aria-label*=\'Next\'][href]")) {
+    nx <- html_element(page, sel)
+    if (!inherits(nx, "xml_missing")) {
+      href <- html_attr(nx, "href")
+      if (!is.na(href) && nzchar(href)) return(xml2::url_absolute(href, url))
+    }
+  }
+  # numbered pagination: a link to page (current + 1)
+  anchors <- html_elements(page, "a[href]")
+  if (length(anchors)) {
+    want <- (url_page_num(url)); want <- (if (is.na(want)) 1L else want) + 1L
+    hrefs <- html_attr(anchors, "href")
+    for (h in hrefs) {
+      abs <- if (is.na(h)) NA_character_ else xml2::url_absolute(h, url)
+      n <- url_page_num(abs)
+      if (!is.na(n) && n == want) return(abs)
+    }
+  }
+  NA_character_
+}'
+
 gen_cards_code <- function(url, xpath, tokens, render_js = FALSE,
                            include_link = TRUE, include_image = FALSE,
-                           include_full_text = FALSE) {
+                           include_full_text = FALSE, pages = 1) {
   has_heading <- "@heading" %in% tokens
   cls_tokens  <- setdiff(tokens, "@heading")
   tok_vec <- if (length(cls_tokens)) {
@@ -1008,6 +1207,57 @@ gen_cards_code <- function(url, xpath, tokens, render_js = FALSE,
                         (length(cls_tokens) == 0 && !has_heading)) '
   vals$full_text <- str_squish(html_text(it))' else ""
 
+  # the per-item -> row extraction, shared by single-page and paginated forms
+  extract_body <- sprintf('  items <- html_elements(page, xpath = %s)
+  map_dfr(items, function(it) {
+    vals <- map(fields, function(f) {
+      xp <- sprintf(".//*[contains(concat(\' \', normalize-space(@class), \' \'), \' %%s \')]", f)
+      node <- html_element(it, xpath = xp)
+      if (inherits(node, "xml_missing")) NA_character_ else str_squish(html_text(node))
+    })
+    names(vals) <- fields%s%s%s%s
+    as_tibble(vals)
+  })', r_str(xpath), heading_block, link_block, image_block, fulltext_block)
+
+  pages <- max(1, as.integer(pages %||% 1))
+
+  # paginated form (non-JS only — server-rendered lists are the paginated case)
+  if (pages > 1 && !isTRUE(render_js)) {
+    return(sprintf(
+'library(httr)
+library(rvest)
+library(dplyr)
+library(purrr)
+library(stringr)
+
+first_url <- %s
+max_pages  <- %d
+fields <- %s
+
+extract_page <- function(page, url) {
+%s
+}
+
+%s
+
+frames <- list(); url <- first_url; visited <- character()
+for (i in seq_len(max_pages)) {
+  resp <- RETRY("GET", url, user_agent(%s), timeout(20), times = 3, pause_base = 2)
+  if (http_error(resp)) break
+  page <- read_html(content(resp, as = "text", encoding = "UTF-8"))
+  df_i <- extract_page(page, url); df_i$page <- i
+  frames[[length(frames) + 1]] <- df_i
+  visited <- c(visited, url)
+  nx <- next_url(page, url)
+  if (is.na(nx) || nx %%in%% visited) break
+  url <- nx; Sys.sleep(0.6)  # be polite between page fetches
+}
+df <- bind_rows(frames)
+
+df', r_str(url), pages, tok_vec, extract_body, NEXT_URL_FN, r_str(BROWSER_UA)))
+  }
+
+  # single-page form
   paste0(
     gen_fetch_code(url, render_js), sprintf('
 
@@ -1015,23 +1265,14 @@ library(dplyr)
 library(purrr)
 library(stringr)
 
-# Repeated element group discovered by the scraper app
-items <- html_elements(page, xpath = %s)
-
 # One column per repeated child class
 fields <- %s
 
-df <- map_dfr(items, function(it) {
-  vals <- map(fields, function(f) {
-    xp <- sprintf(".//*[contains(concat(\' \', normalize-space(@class), \' \'), \' %%s \')]", f)
-    node <- html_element(it, xpath = xp)
-    if (inherits(node, "xml_missing")) NA_character_ else str_squish(html_text(node))
-  })
-  names(vals) <- fields%s%s%s%s
-  as_tibble(vals)
-})
+df <- {
+%s
+}
 
-df', r_str(xpath), tok_vec, heading_block, link_block, image_block, fulltext_block))
+df', tok_vec, extract_body))
 }
 
 gen_custom_code <- function(url, selector, mode = "text", attr_name = NULL,
@@ -1172,4 +1413,17 @@ df <- dplyr::filter(df, !stringr::str_detect(href, "^(javascript:|#$)"))
 df <- dplyr::distinct(df, url, text, .keep_all = TRUE)', filt, '
 
 df')
+}
+
+# Appended to a dataset's script when the user runs "Auto-detect column types".
+# readr::type_convert reproduces the same text->number/logical coercion.
+gen_infer_code <- function(changed) {
+  cols <- if (length(changed)) paste0("#   ", changed, collapse = "\n") else "#   (none)"
+  paste0('
+
+# --- auto-detected column types (applied in the app) ---
+# readr guesses numeric / integer / logical from the text and coerces cleanly.
+# Columns whose type changed:
+', cols, '
+df <- readr::type_convert(df, guess_integer = TRUE)')
 }
