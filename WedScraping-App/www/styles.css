@@ -863,3 +863,4 @@ div.dt-container .dt-search input.dt-input:focus {
   pointer-events: none;
 }
 .copy-toast.show { opacity: 1; transform: translate(-50%, 0); }
+.copy-toast.error { background: var(--bad-ink); color: #fff; }

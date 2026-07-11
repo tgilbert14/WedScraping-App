@@ -480,13 +480,11 @@ function(input, output, session) {
   # --------------------------------------------------------------------------
   # Quick scrape + recipe runner
   # --------------------------------------------------------------------------
-  # recipe code + a pagination note when more than one page was scraped
+  # a runnable, standalone reproduce-script for a curated recipe
   recipe_code <- function(recipe, np) {
-    note <- if (np > 1) sprintf(
-      "\n# Scraped across up to %d pages by following the site's 'next page' link.\n# (the Cards tab's code panel shows a runnable paginated loop)\n", np) else "\n"
     paste0("# Curated recipe: ", recipe$label,
-           "\n# (see the Cards / JSON tab code panels for generic equivalents)", note, "\n",
-           gen_fetch_code(cur_url(), used_js()))
+           if (np > 1) sprintf("  (scraped up to %d pages)\n", np) else "\n",
+           gen_recipe_code(recipe, cur_url(), used_js(), pages = np))
   }
 
   best_guess_scrape <- function() {
@@ -501,9 +499,10 @@ function(input, output, session) {
                          max_pages = np)
       } else run_recipe(a$recipe, page, cur_url())
       if (nrow(df) > 0) {
+        ps <- attr(df, "pages_scraped") %||% 1L
         return(list(df = df, name = a$recipe$id,
                     source = paste0("Recipe: ", a$recipe$label,
-                                    if (np > 1) sprintf(" (%s pages)", attr(df, "pages_scraped") %||% np) else ""),
+                                    if (ps > 1) sprintf(" (%s pages)", ps) else ""),
                     code = recipe_code(a$recipe, np)))
       }
     }
@@ -527,9 +526,10 @@ function(input, output, session) {
                          max_pages = np)
       } else scrape_cards(page, g$xpath, toks, base_url = cur_url())
       if (nrow(df) > 0) {
+        ps <- attr(df, "pages_scraped") %||% 1L
         return(list(df = df, name = "cards",
                     source = paste0(g$label, " on ", cur_url(),
-                                    if (np > 1) sprintf(" (%s pages)", attr(df, "pages_scraped") %||% np) else ""),
+                                    if (ps > 1) sprintf(" (%s pages)", ps) else ""),
                     code = gen_cards_code(cur_url(), g$xpath, toks, used_js(), pages = np)))
       }
     }
@@ -548,6 +548,9 @@ function(input, output, session) {
 
   observeEvent(input$quick_scrape, {
     req(input$quick_scrape > 0, rv$analysis)
+    if (pages_n() > 1 && used_js()) {
+      notify("Pagination isn't available with headless-Chrome rendering - only this page was scraped.", "warning")
+    }
     res <- withProgress(message = "Quick scraping...",
                         tryCatch(best_guess_scrape(), error = function(e) NULL))
     if (is.null(res)) {
@@ -565,6 +568,9 @@ function(input, output, session) {
     req(input$run_recipe_btn > 0, rv$analysis$recipe, cur_page())
     r <- rv$analysis$recipe
     np <- pages_n()
+    if (np > 1 && used_js()) {
+      notify("Pagination isn't available with headless-Chrome rendering - only this page was scraped.", "warning")
+    }
     df <- withProgress(
       message = paste("Running recipe:", r$label),
       detail = if (np > 1) sprintf("across up to %d pages...", np) else NULL,
@@ -583,10 +589,10 @@ function(input, output, session) {
     nm <- store_dataset(paste0(r$id, "_", rv$analysis$domain), df,
                         recipe_code(r, np),
                         paste0("Recipe: ", r$label,
-                               if (np > 1) sprintf(" (%s pages)", pg_scraped) else ""))
+                               if (pg_scraped > 1) sprintf(" (%s pages)", pg_scraped) else ""))
     bslib::nav_select("main_tabs", "tab_data", session)
     notify(sprintf("Recipe added '%s' (%d rows%s).", nm, nrow(df),
-                   if (np > 1) sprintf(" from %s pages", pg_scraped) else ""))
+                   if (pg_scraped > 1) sprintf(" from %s pages", pg_scraped) else ""))
   })
 
   # --------------------------------------------------------------------------
@@ -737,7 +743,7 @@ function(input, output, session) {
       df = df,
       code = card_codegen(g),
       source = paste0(g$label, " on ", cur_url(),
-                      if (np > 1) sprintf(" (%s pages)", pg_scraped) else "")
+                      if (pg_scraped > 1) sprintf(" (%s pages)", pg_scraped) else "")
     )
   })
 
@@ -1048,17 +1054,28 @@ function(input, output, session) {
                    paste(res$changed, collapse = ", ")))
   })
 
-  # keep the column picker in sync with the selected dataset's columns
+  # keep the column picker in sync — but only reset the selection when the
+  # column SET actually changes (new dataset / drop / rename), so a pure row
+  # cleanup doesn't discard a user's in-progress un-tick or reorder.
+  prev_cols <- reactiveVal(NULL)
   observe({
     ds <- tryCatch(cur_ds(), error = function(e) NULL)
     cols <- if (is.null(ds)) character() else names(ds$df)
-    updateSelectizeInput(session, "data_cols", choices = cols, selected = cols,
-                         server = FALSE)
+    if (!identical(cols, isolate(prev_cols()))) {
+      updateSelectizeInput(session, "data_cols", choices = cols, selected = cols,
+                           server = FALSE)
+      prev_cols(cols)
+    }
   })
 
   observeEvent(input$data_cols_apply, {
     ds <- tryCatch(cur_ds(), error = function(e) NULL); req(ds)
     sel <- input$data_cols
+    # guard against a stale selection from the previously-selected dataset
+    # (updateSelectizeInput lags one client round-trip)
+    if (!all(sel %in% names(ds$df))) {
+      notify("Column list is still updating - click Apply again.", "warning"); return()
+    }
     sel <- sel[sel %in% names(ds$df)]
     if (!length(sel)) { notify("Keep at least one column.", "warning"); return() }
     if (identical(sel, names(ds$df))) { notify("Columns unchanged."); return() }

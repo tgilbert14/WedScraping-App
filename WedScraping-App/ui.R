@@ -330,8 +330,8 @@ page_sidebar(
   tags$head(
     # bump ?v= whenever styles.css / app.js changes so returning browsers
     # don't serve a stale cached copy
-    tags$link(rel = "stylesheet", href = "styles.css?v=7"),
-    tags$script(src = "app.js?v=3")
+    tags$link(rel = "stylesheet", href = "styles.css?v=8"),
+    tags$script(src = "app.js?v=4")
   ),
   useShinyjs(),
 

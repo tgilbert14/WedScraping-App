@@ -18,21 +18,28 @@
 
   // ---- Copy-to-clipboard for every generated-code panel --------------------
   function copyText(text, label) {
-    var done = function () { toast((label || "Copied") + " to clipboard"); };
+    var ok = function () { toast((label || "Copied") + " to clipboard"); };
+    var fail = function () { toast("Couldn't copy - select the text and press Ctrl+C", true); };
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(done, function () { legacyCopy(text); done(); });
-    } else { legacyCopy(text); done(); }
+      navigator.clipboard.writeText(text).then(ok, function () {
+        legacyCopy(text) ? ok() : fail();
+      });
+    } else {
+      legacyCopy(text) ? ok() : fail();
+    }
   }
   function legacyCopy(text) {
     var ta = document.createElement("textarea");
     ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
     document.body.appendChild(ta); ta.select();
-    try { document.execCommand("copy"); } catch (e) {}
+    var ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
     document.body.removeChild(ta);
+    return ok;
   }
-  function toast(msg) {
+  function toast(msg, isError) {
     var t = document.createElement("div");
-    t.className = "copy-toast";
+    t.className = "copy-toast" + (isError ? " error" : "");
     t.textContent = msg;
     document.body.appendChild(t);
     requestAnimationFrame(function () { t.classList.add("show"); });
