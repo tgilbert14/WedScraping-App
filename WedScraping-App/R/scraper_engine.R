@@ -72,6 +72,18 @@ url_page_num <- function(u) {
   if (is.na(m)) NA_integer_ else as.integer(m)
 }
 
+# A case-insensitive key for "the same listing": scheme+host+path with the
+# query string, fragment, /page/N segment and trailing slash removed. Used to
+# reject a numbered-pagination link that points at a DIFFERENT path (a stray
+# ?page=2 in a footer) while tolerating extra query params on the real one.
+url_path_key <- function(u) {
+  u <- u %||% ""
+  u <- sub("[?#].*$", "", u)              # drop query + fragment
+  u <- sub("(?i)/page[-/]\\d+", "", u)    # drop a /page/N path segment
+  u <- sub("/+$", "", u)                  # drop trailing slash(es)
+  tolower(u)
+}
+
 # Return the absolute URL of the next page, or NA if there isn't one.
 # Tries, in order: <link rel=next>, <a rel=next>, common "next" controls, a
 # next-glyph anchor, and finally a numbered-pagination link to page (current+1).
@@ -118,15 +130,11 @@ next_page_url <- function(page, current_url) {
     }
   }
   # 4. numbered pagination: a link to page (current + 1) that shares this
-  # page's path (so a stray ?page=2 in a sidebar/footer can't win). Catches
+  # page's PATH (so a stray ?page=2 in a sidebar/footer can't win, but extra
+  # query params / case changes on the real next link are tolerated). Catches
   # ?Page=N sites (e.g. 247Sports) with no rel=next / .next control.
   if (length(anchors)) {
-    strip_page <- function(u) {
-      u <- sub("(?i)([?&])page=\\d+&?", "\\1", u %||% "")   # drop the page param
-      u <- sub("(?i)/page[-/]\\d+", "", u)                   # drop the /page/N segment
-      sub("[?&]$", "", u)                                    # tidy trailing ?/&
-    }
-    cur_base <- strip_page(current_url)
+    cur_key <- url_path_key(current_url)
     hrefs <- rvest::html_attr(anchors, "href")
     want  <- (url_page_num(current_url) %||% 1L)
     want  <- (if (is.na(want)) 1L else want) + 1L
@@ -134,7 +142,7 @@ next_page_url <- function(page, current_url) {
       if (is.na(hrefs[idx])) next
       abs <- xml2::url_absolute(hrefs[idx], current_url)
       if (is.na(url_page_num(abs)) || url_page_num(abs) != want) next
-      if (!identical(strip_page(abs), cur_base)) next  # same listing only
+      if (!identical(url_path_key(abs), cur_key)) next  # same listing path only
       u <- pick(anchors[idx])
       if (!is.na(u)) return(u)
     }
@@ -1183,11 +1191,12 @@ url_page_num <- function(u) {
   if (is.na(m)) m <- stringr::str_match(u, "(?i)/page[-/](\\\\d+)")[, 2]
   if (is.na(m)) NA_integer_ else as.integer(m)
 }
-strip_page <- function(u) {
+url_path_key <- function(u) {
   u <- if (is.null(u) || is.na(u)) "" else u
-  u <- sub("(?i)([?&])page=\\\\d+&?", "\\\\1", u)
+  u <- sub("[?#].*$", "", u)
   u <- sub("(?i)/page[-/]\\\\d+", "", u)
-  sub("[?&]$", "", u)
+  u <- sub("/+$", "", u)
+  tolower(u)
 }
 next_url <- function(page, url) {
   cur_dom <- url_dom(url)
@@ -1212,14 +1221,14 @@ next_url <- function(page, url) {
     txt <- stringr::str_squish(tolower(html_text(anchors)))
     hit <- which(txt %in% c("next", "next page", "»", "›", ">", "older", "older posts"))
     if (length(hit)) { u <- pick(anchors[hit[1]]); if (!is.na(u)) return(u) }
-    cur_base <- strip_page(url)
+    cur_key <- url_path_key(url)
     want <- url_page_num(url); want <- (if (is.na(want)) 1L else want) + 1L
     hrefs <- html_attr(anchors, "href")
     for (k in seq_along(hrefs)) {
       if (is.na(hrefs[k])) next
       abs <- xml2::url_absolute(hrefs[k], url)
       n <- url_page_num(abs)
-      if (is.na(n) || n != want || !identical(strip_page(abs), cur_base)) next
+      if (is.na(n) || n != want || !identical(url_path_key(abs), cur_key)) next
       u <- pick(anchors[k]); if (!is.na(u)) return(u)
     }
   }
