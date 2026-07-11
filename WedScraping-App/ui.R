@@ -297,7 +297,7 @@ page_sidebar(
               placeholder = "https://example.com/page", width = "100%"),
     checkboxInput("render_js",
                   tags$span("Render with headless Chrome",
-                            tags$small(class = "text-muted", " (JS-heavy sites)")),
+                            tags$small(class = "text-muted", "for JS-heavy sites")),
                   value = FALSE),
     actionButton("analyze", tagList(icon("wand-magic-sparkles"), " Analyze site"),
                  class = "btn-primary w-100 analyze-btn"),
@@ -306,7 +306,9 @@ page_sidebar(
   ),
 
   tags$head(
-    tags$link(rel = "stylesheet", href = "styles.css")
+    # bump ?v= whenever styles.css changes so returning browsers don't serve
+    # a stale cached copy
+    tags$link(rel = "stylesheet", href = "styles.css?v=5")
   ),
   useShinyjs(),
 

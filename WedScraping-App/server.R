@@ -272,30 +272,43 @@ function(input, output, session) {
   output$overview_ui <- renderUI({
     a <- rv$analysis
     if (is.null(a)) {
+      step_card <- function(num, icon_name, title, text) {
+        div(class = "step-card",
+            div(class = "step-card-top",
+                span(class = "step-card-icon", icon(icon_name)),
+                span(class = "step-card-num", paste0("STEP ", num))),
+            h5(title),
+            p(text))
+      }
       return(div(class = "welcome-wrap",
-        card(class = "welcome-card", card_body(
-          h3("Turn any web page into a data frame"),
-          p("This studio reads a page, figures out what kind of site it is, and offers you the structures worth scraping - no code required (but it writes the R code for you anyway)."),
-          tags$ol(class = "welcome-steps",
-            tags$li(strong("Point:"), " paste a URL in the sidebar (or pick an example)."),
-            tags$li(strong("Analyze:"), " the app fingerprints the site and discovers tables, repeated cards, lists, links, and embedded JSON."),
-            tags$li(strong("Pick:"), " preview any structure as a data frame and add it to ", em("My Data"), "."),
-            tags$li(strong("Use:"), " clean, rename, download (CSV / Excel / JSON / RDS) - and grab the generated R script to reproduce it.")
-          ),
-          p(class = "hint-text",
+        div(class = "hero",
+            div(class = "hero-badge", icon("spider"), "Web Scraper Studio"),
+            h1(class = "hero-title",
+               "Turn any web page into a ", span(class = "hero-accent", "data frame")),
+            p(class = "hero-sub",
+              "Point it at a page and the studio figures out what kind of site it is, then offers you every structure worth scraping - no code required (but it writes the R code for you anyway).")),
+        div(class = "step-grid",
+            step_card(1, "location-crosshairs", "Point",
+                      "Paste a URL in the sidebar, or pick a bundled example."),
+            step_card(2, "wand-magic-sparkles", "Analyze",
+                      "Fingerprints the site and discovers tables, cards, lists, links, and embedded JSON."),
+            step_card(3, "hand-pointer", "Pick",
+                      "Preview any structure as a data frame and add it to My Data."),
+            step_card(4, "download", "Use",
+                      "Clean, rename, download - and grab the R script that reproduces it.")),
+        div(class = "hero-tip",
             icon("lightbulb"),
-            " Sites that load their content with JavaScript look empty on a direct request - flip on “Render with headless Chrome” and re-analyze.")
-        ))
+            span(HTML("JS-heavy sites look empty on a direct request &mdash; flip on <b>Render with headless Chrome</b> and re-analyze.")))
       ))
     }
 
     d <- rv$disc
-    found_row <- function(label, n, btn_id, note = NULL) {
+    found_row <- function(label, n, btn_id, icon_name) {
       div(class = "found-row",
           div(class = "found-row-left",
+              span(class = "found-row-icon", icon(icon_name)),
               span(class = paste("count-badge", if (n > 0) "count-yes" else "count-zero"), n),
-              span(class = "found-row-label", label),
-              if (!is.null(note)) span(class = "found-row-note", note)),
+              span(class = "found-row-label", label)),
           if (n > 0) actionButton(btn_id, "Open", class = "btn-sm btn-outline-primary")
       )
     }
@@ -304,6 +317,7 @@ function(input, output, session) {
       layout_columns(
         col_widths = c(7, 5),
         card(
+          class = "fit-card",
           card_header(tagList(icon("fingerprint"), " Site fingerprint")),
           card_body(
             div(class = "fp-title", a$title %||% ""),
@@ -332,12 +346,12 @@ function(input, output, session) {
         card(
           card_header(tagList(icon("binoculars"), " What we found")),
           card_body(
-            found_row("HTML tables",          nrow(d$tables), "goto_tables"),
-            found_row("Repeated card groups", nrow(d$cards),  "goto_cards"),
-            found_row("Lists",                nrow(d$lists),  "goto_lists"),
-            found_row("Embedded JSON payloads", length(rv$json_blobs), "goto_json"),
-            found_row("Links",                nrow(d$links),  "goto_links"),
-            found_row("Images",               nrow(d$images), "goto_images"),
+            found_row("HTML tables",          nrow(d$tables), "goto_tables", "table"),
+            found_row("Repeated card groups", nrow(d$cards),  "goto_cards",  "layer-group"),
+            found_row("Lists",                nrow(d$lists),  "goto_lists",  "list-ul"),
+            found_row("Embedded JSON payloads", length(rv$json_blobs), "goto_json", "file-code"),
+            found_row("Links",                nrow(d$links),  "goto_links",  "link"),
+            found_row("Images",               nrow(d$images), "goto_images", "image"),
             tags$hr(),
             actionButton("quick_scrape",
                          tagList(icon("bolt"), " Quick scrape - best guess to My Data"),

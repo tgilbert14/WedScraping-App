@@ -53,15 +53,27 @@ PRESETS <- c(
     "https://infosci.arizona.edu/research-faculty/faculty"
 )
 
-APP_THEME <- bslib::bs_theme(
-  version    = 5,
-  primary    = "#0f766e",
-  secondary  = "#475569",
-  success    = "#15803d",
-  warning    = "#b45309",
-  danger     = "#b91c1c",
-  "border-radius" = "0.5rem"
-)
+APP_THEME <- local({
+  base <- bslib::bs_theme(
+    version    = 5,
+    primary    = "#0d9488",
+    secondary  = "#475569",
+    success    = "#059669",
+    warning    = "#b45309",
+    danger     = "#b91c1c",
+    "border-radius" = "0.75rem"
+  )
+  # webfonts (self-hosted after first download); offline -> system stack in CSS
+  tryCatch(
+    bslib::bs_theme_update(
+      base,
+      base_font    = bslib::font_google("Inter", local = TRUE),
+      heading_font = bslib::font_google("Space Grotesk", local = TRUE),
+      code_font    = bslib::font_google("JetBrains Mono", local = TRUE)
+    ),
+    error = function(e) base
+  )
+})
 
 # ---------------------------------------------------------------------------
 # Discovery bundle (composes the engine's discover_* functions)
@@ -124,6 +136,6 @@ shorten_path <- function(x, width = 70) {
 }
 
 spinner <- function(ui_element) {
-  shinycssloaders::withSpinner(ui_element, type = 7, color = "#0f766e",
+  shinycssloaders::withSpinner(ui_element, type = 7, color = "#0d9488",
                                proxy.height = "220px")
 }
