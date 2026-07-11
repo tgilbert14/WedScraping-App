@@ -3,14 +3,32 @@
 An interactive R Shiny app that turns any web page into a data frame:
 **point → analyze → pick → data frame → download**.
 
+**▶ Live demo:** https://019f4f8f-d193-b0fb-71bb-e1d8edb7ac5f.share.connect.posit.cloud/
+
 Paste a URL and the studio fetches the page, figures out what kind of site it
 is, and offers you every scrapable structure it can find — no code required
 (but it writes the reproducible R code for you anyway).
+
+> The hosted demo runs on Posit Connect Cloud, which has no Chrome binary, so
+> the "Render with headless Chrome" toggle is inert there (every other feature
+> works). Datacenter IPs also get blocked by some sites more than a home IP —
+> run it locally for heavy scraping.
 
 ## Run it
 
 ```r
 shiny::runApp("WedScraping-App")
+```
+
+## Deploy
+
+The app is set up for **git-backed Posit Connect Cloud** deployment: the
+generated [`WedScraping-App/manifest.json`](WedScraping-App/manifest.json)
+pins R 4.5.2 and its 70 CRAN dependencies, and every push to `main`
+auto-redeploys. Regenerate the manifest after any package change:
+
+```r
+rsconnect::writeManifest(appDir = "WedScraping-App")
 ```
 
 Requires R ≥ 4.3 with: `shiny`, `bslib`, `shinyjs`, `shinycssloaders`, `rvest`,
