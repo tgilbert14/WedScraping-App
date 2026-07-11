@@ -1,0 +1,14 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "scraper-app",
+      "runtimeExecutable": "C:\\Program Files\\R\\R-4.5.2\\bin\\Rscript.exe",
+      "runtimeArgs": [
+        "-e",
+        "shiny::runApp('WedScraping-App', port = 7788, launch.browser = FALSE)"
+      ],
+      "port": 7788
+    }
+  ]
+}
